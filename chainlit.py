@@ -36,9 +36,6 @@ def _get_file_hashes(uploaded_files: List) -> frozenset:
 
 @cl.on_chat_start
 async def start():
-    # Global variables to maintain state across sessions
-    session_states = {}
-
     """Initialize the chat interface."""
     await cl.Message(
         content="Get accurate, varified answers to questions about you documents!\n\n"
@@ -59,19 +56,29 @@ async def start():
 # Add example loading actions
 @cl.on_chat_start
 async def add_example_actions():
-    """Add example loading actions."""
-    actions = [
-        cl.Action(name="load_google_2024_environmental_report", 
-                 label="Load: Google 2024 Environmental Report", 
-                 payload={"example_name": "Google 2024 Environmental Report"}),
-        cl.Action(name="load_deepseek_r1_technical_report", 
-                 label="Load: DeepSeek-R1 Technical Report", 
-                 payload={"example_name": "DeepSeek-R1 Technical Report"})
-    ]
-    
+    uploaded_files = None
+
+    # Wait for the user to upload a file
+    while uploaded_files == None:
+        uploaded_files = await cl.AskFileMessage(
+            content="Please upload a text file to begin!", accept=constants.ALLOWED_TYPES
+        ).send()
+
+    chunks = processor.process(uploaded_files)
+    current_hashes = _get_file_hashes(uploaded_files)
+                
+    if state["retriever"] is None or current_hashes != state["file_hashes"]:
+        logger.info("Processing new/changed documents...")
+        chunks = processor.process(uploaded_files)
+        retriever = retriever_builder.build_hybrid_retriever(chunks)
+        
+        state.update({
+            "file_hashes": current_hashes,
+            "retriever": retriever
+        })
+    # Let the user know that the system is ready
     await cl.Message(
-        content="**Quick Start:** Load an example to get started!",
-        actions=actions
+        content="Files uploaded! Start chat now!"
     ).send()
 
 
